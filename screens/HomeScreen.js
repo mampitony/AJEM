@@ -10,11 +10,11 @@ const HomeScreen = ({ navigation }) => {
 
         <View style={styles.buttonContainer}>
           <TouchableOpacity
-            style={styles.button}
+            style={styles.button1}
             onPress={() => navigation.navigate('AuthScreen', { userType: 'admin' })}
           >
             <Image
-              source={require('../assets/adm.png')}
+              source={require('../assets/secure.png')}
               style={styles.image}
               resizeMode="contain"
             />
@@ -33,7 +33,7 @@ const HomeScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('AuthScreen', { userType: 'user' })}
           >
             <Image
-              source={require('../assets/userr.png')}
+              source={require('../assets/use1.png')}
               style={styles.image}
               resizeMode="contain"
             />
@@ -101,7 +101,21 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: '#4CAF50',
     paddingVertical: 15,
-    paddingHorizontal: 40,
+    paddingHorizontal: 25,
+    justifyContent: 'center',
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },button1 : {
+        backgroundColor: '#4CAF50',
+    paddingVertical: 15,
+    paddingHorizontal: 25,
     justifyContent: 'center',
     borderRadius: 25,
     shadowColor: '#000',
@@ -119,7 +133,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginTop: -30,
-    justifyContent: 'space-between',
+    marginBottom: 15,
+    // justifyContent: 'space-between',
   },
 });
 
