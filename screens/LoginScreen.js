@@ -1,20 +1,25 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, Alert, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { getUserByEmail, addUser, hashPassword, generateSalt, getAllUsers } from '../database';
+import { Ionicons } from '@expo/vector-icons';
+import { getUserByEmail, addUser, hashPassword, getAllUsers } from '../database';
 
 const AuthScreen = ({ navigation, route }) => {
-  const [isLogin, setIsLogin] = useState(true); // true pour login, false pour signup
+  const [isLogin, setIsLogin] = useState(true);
   const userType = route.params?.userType || 'user';
 
-  // États pour le formulaire de connexion
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // États pour le formulaire d'inscription
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
   const [adminKey, setAdminKey] = useState('');
+
+  // États pour afficher/masquer les mots de passe
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showAdminKey, setShowAdminKey] = useState(false);
 
   const validateEmail = (email) => {
     const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -40,24 +45,19 @@ const AuthScreen = ({ navigation, route }) => {
         return;
       }
 
-      // Vérifier le rôle de l'utilisateur
       if (userType === 'admin' && user.role !== 'admin') {
         Alert.alert('Erreur', 'Accès administrateur requis');
         return;
       }
 
-      // Redirection selon le type d'utilisateur
       if (userType === 'admin') {
-        navigation.navigate('AdminScreen',
-          {
-            user: { prenom: user.prenom, profileImage: user.profileImage }
-          }
-        );
+        navigation.navigate('AdminScreen', {
+          user: { prenom: user.prenom, profileImage: user.profileImage }
+        });
       } else {
         navigation.navigate('UserScreen');
       }
 
-      // Vider les champs après connexion réussie
       setLoginEmail('');
       setLoginPassword('');
     } catch (error) {
@@ -66,19 +66,8 @@ const AuthScreen = ({ navigation, route }) => {
   };
 
   const handleSignup = async () => {
-    // Validation des champs
     if (!signupEmail || !signupPassword || !signupConfirmPassword) {
       Alert.alert('Erreur', 'Veuillez remplir tous les champs');
-      return;
-    }
-
-    if (userType === 'admin' && !adminKey) {
-      Alert.alert('Erreur', 'Veuillez saisir le mot clé administrateur');
-      return;
-    }
-
-    if (userType === 'admin' && adminKey !== 'ADMIN123') {
-      Alert.alert('Erreur', 'Mot clé administrateur incorrect');
       return;
     }
 
@@ -94,36 +83,73 @@ const AuthScreen = ({ navigation, route }) => {
 
     try {
       const allUsers = await getAllUsers();
-      const emailExists = allUsers.some(user => user.email === signupEmail);
-      if (!emailExists) {
-        Alert.alert('Erreur', 'Cet email n\'existe pas dans la liste des membres. Inscription impossible.');
-        return;
+      
+      if (userType === 'admin') {
+        if (!adminKey) {
+          Alert.alert('Erreur', 'Veuillez saisir le mot clé administrateur');
+          return;
+        }
+
+        if (adminKey !== 'ADMIN123') {
+          Alert.alert('Erreur', 'Mot clé administrateur incorrect');
+          return;
+        }
+
+        const existingAdmin = allUsers.find(user => user.role === 'admin');
+        if (existingAdmin) {
+          Alert.alert('Erreur', 'Un compte administrateur existe déjà. Un seul admin est autorisé.');
+          return;
+        }
+
+        const emailExists = allUsers.find(user => user.email === signupEmail);
+        if (emailExists) {
+          Alert.alert('Erreur', 'Cet email est déjà utilisé.');
+          return;
+        }
+
+        await addUser(
+          signupEmail,
+          signupEmail,
+          signupPassword,
+          'admin',
+          null, null, null, null, null, null
+        );
+
+        Alert.alert('Succès', 'Compte administrateur créé avec succès');
+      } else {
+        const memberExists = allUsers.find(user => user.email === signupEmail);
+        
+        if (!memberExists) {
+          Alert.alert('Erreur', 'Cet email n\'existe pas dans la liste des membres. Inscription impossible.');
+          return;
+        }
+
+        if (memberExists.passwordHash && memberExists.passwordHash !== '') {
+          Alert.alert('Erreur', 'Un compte existe déjà avec cet email. Utilisez la connexion.');
+          return;
+        }
+
+        await addUser(
+          memberExists.name || signupEmail,
+          signupEmail,
+          signupPassword,
+          'user',
+          memberExists.prenom,
+          memberExists.etablissement,
+          memberExists.niveau,
+          memberExists.mention,
+          memberExists.telephone,
+          memberExists.profileImage
+        );
+
+        Alert.alert('Succès', 'Compte utilisateur créé avec succès');
       }
 
-      const existingUserWithPassword = await getUserByEmail(signupEmail);
-      if (existingUserWithPassword) {
-        Alert.alert('Erreur', 'Un compte existe déjà avec cet email. Utilisez la connexion.');
-        return;
-      }
-
-      // Ajout d'un nouvel utilisateur avec le mot de passe
-      const salt = await generateSalt();
-      const passwordHash = await hashPassword(signupPassword, salt);
-      await addUser(
-        signupEmail, // Nom par défaut = email
-        signupEmail,
-        passwordHash,
-        salt,
-        userType === 'admin' ? 'admin' : 'user' // Rôle basé sur userType
-      );
-
-      Alert.alert('Succès', `${userType === 'admin' ? 'Administrateur' : 'Utilisateur'} créé avec succès`);
-
-      // Vider les champs après inscription réussie
       setSignupEmail('');
       setSignupPassword('');
       setSignupConfirmPassword('');
       setAdminKey('');
+      setIsLogin(true);
     } catch (error) {
       Alert.alert('Erreur', 'Une erreur est survenue: ' + error.message);
     }
@@ -135,7 +161,6 @@ const AuthScreen = ({ navigation, route }) => {
         {userType === 'admin' ? 'Espace Administrateur' : 'Espace Utilisateur'}
       </Text>
 
-      {/* Onglets de navigation */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tab, isLogin && styles.activeTab]}
@@ -152,7 +177,6 @@ const AuthScreen = ({ navigation, route }) => {
       </View>
 
       {isLogin ? (
-        // Formulaire de CONNEXION
         <View style={styles.formContainer}>
           <Text style={styles.label}>Entrez votre adresse email</Text>
           <TextInput
@@ -164,22 +188,32 @@ const AuthScreen = ({ navigation, route }) => {
             keyboardType="email-address"
           />
           <Text style={styles.label}>Entrez votre mot de passe</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Mot de passe"
-            value={loginPassword}
-            onChangeText={setLoginPassword}
-            secureTextEntry
-          />
-
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Mot de passe"
+              value={loginPassword}
+              onChangeText={setLoginPassword}
+              secureTextEntry={!showLoginPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowLoginPassword(!showLoginPassword)}
+            >
+              <Ionicons
+                name={showLoginPassword ? 'eye-off' : 'eye'}
+                size={22}
+                color="#666"
+              />
+            </TouchableOpacity>
+          </View>
           <View style={styles.buttonContainer}>
             <Button title="Se connecter" onPress={handleLogin} color="#17813cff" />
           </View>
         </View>
       ) : (
-        // Formulaire d'INSCRIPTION
         <ScrollView style={styles.formContainer}>
-          <Text style={styles.label}>Votre adresse email </Text>
+          <Text style={styles.label}>Votre adresse email</Text>
           <TextInput
             style={styles.input}
             placeholder="Email *"
@@ -188,39 +222,73 @@ const AuthScreen = ({ navigation, route }) => {
             keyboardType="email-address"
             autoCapitalize="none"
           />
-
           {userType === 'admin' && (
             <>
-              <Text style={styles.label}>Mot clé d'administrateur </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Mot clé"
-                value={adminKey}
-                onChangeText={setAdminKey}
-                autoCapitalize="none"
-                secureTextEntry
-              />
+              <Text style={styles.label}>Mot clé d'administrateur</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Mot clé"
+                  value={adminKey}
+                  onChangeText={setAdminKey}
+                  autoCapitalize="none"
+                  secureTextEntry={!showAdminKey}
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowAdminKey(!showAdminKey)}
+                >
+                  <Ionicons
+                    name={showAdminKey ? 'eye-off' : 'eye'}
+                    size={22}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+              </View>
             </>
           )}
-          <Text style={styles.label}>Créer un mot de passe </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Mot de passe *"
-            value={signupPassword}
-            onChangeText={setSignupPassword}
-            secureTextEntry
-          />
+          <Text style={styles.label}>Créer un mot de passe</Text>
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Mot de passe *"
+              value={signupPassword}
+              onChangeText={setSignupPassword}
+              secureTextEntry={!showSignupPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowSignupPassword(!showSignupPassword)}
+            >
+              <Ionicons
+                name={showSignupPassword ? 'eye-off' : 'eye'}
+                size={22}
+                color="#666"
+              />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.label}>Confirmer votre mot de passe</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Confirmer le mot de passe *"
-            value={signupConfirmPassword}
-            onChangeText={setSignupConfirmPassword}
-            secureTextEntry
-          />
-
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Confirmer le mot de passe *"
+              value={signupConfirmPassword}
+              onChangeText={setSignupConfirmPassword}
+              secureTextEntry={!showConfirmPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+            >
+              <Ionicons
+                name={showConfirmPassword ? 'eye-off' : 'eye'}
+                size={22}
+                color="#666"
+              />
+            </TouchableOpacity>
+          </View>
           <View style={styles.buttonContainer}>
-            <Button style={styles.butt} title="S'inscrire" onPress={handleSignup} color="#212683ff" />
+            <Button title="S'inscrire" onPress={handleSignup} color="#212683ff" />
           </View>
         </ScrollView>
       )}
@@ -278,6 +346,26 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: 'white',
   },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 5,
+    marginBottom: 15,
+    height: 40,
+  },
+  passwordInput: {
+    flex: 1,
+    height: 40,
+    paddingHorizontal: 10,
+  },
+  eyeButton: {
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   label: {
     marginBottom: 5,
     fontWeight: 'bold',
@@ -289,13 +377,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 80,
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-  
+    shadowOffset: { width: 0, height: 2 },
   },
-
 });
 
 export default AuthScreen;
